@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>廠商預提折讓沖銷比對系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F5F7FA;
+    --surface:#FFFFFF;
+    --ink:#16213E;
+    --ink-soft:#5B6472;
+    --ink-faint:#8A93A3;
+    --accent:#2A9D8F;
+    --accent-deep:#1B6E63;
+    --accent-bg:#E7F5F3;
+    --warn:#E76F51;
+    --warn-bg:#FDECE8;
+    --gold:#C9A227;
+    --border:#E3E7EE;
+    --border-strong:#CBD3E0;
+    --radius:10px;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --sans: 'Inter', -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{max-width:1320px; margin:0 auto; padding:0 24px 64px;}
+
+  /* Header */
+  header.top{
+    background:linear-gradient(135deg,#16213E 0%,#1B2A4A 55%,#173B3A 100%);
+    color:#fff; padding:28px 24px 26px; margin-bottom:26px;
+  }
+  header.top .inner{max-width:1320px; margin:0 auto; display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap;}
+  header.top h1{font-size:20px; font-weight:700; margin:0 0 4px; letter-spacing:.02em;}
+  header.top p{margin:0; color:#AEB9CE; font-size:13px;}
+  .badge-period{
+    font-family:var(--mono); font-size:12px; background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.18); padding:5px 12px; border-radius:999px; color:#DCE7E5;
+    white-space:nowrap;
+  }
+
+  /* Section titles */
+  .section-label{
+    font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-faint); margin:0 0 10px 2px;
+  }
+
+  /* Upload zones */
+  .upload-row{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:30px;}
+  .dropzone{
+    background:var(--surface); border:1.5px dashed var(--border-strong); border-radius:var(--radius);
+    padding:18px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+    position:relative; min-height:118px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+  }
+  .dropzone:hover{border-color:var(--accent); background:var(--accent-bg);}
+  .dropzone.dragover{border-color:var(--accent); background:var(--accent-bg);}
+  .dropzone.loaded{border-style:solid; border-color:var(--accent); background:var(--accent-bg);}
+  .dropzone .dz-icon{font-size:22px; opacity:.55;}
+  .dropzone.loaded .dz-icon{opacity:1;}
+  .dropzone .dz-title{font-weight:700; font-size:13.5px; color:var(--ink);}
+  .dropzone .dz-sub{font-size:11.5px; color:var(--ink-faint);}
+  .dropzone .dz-file{font-family:var(--mono); font-size:11.5px; color:var(--accent-deep); word-break:break-all; padding:0 8px;}
+  .dropzone input[type=file]{display:none;}
+  .dz-count{
+    position:absolute; top:10px; right:12px; font-family:var(--mono); font-size:11px;
+    background:var(--ink); color:#fff; border-radius:999px; padding:2px 8px;
+  }
+  .dropzone.loaded .dz-count{background:var(--accent-deep);}
+
+  /* KPI flow */
+  .flow-wrap{
+    display:flex; align-items:stretch; gap:0; margin-bottom:30px; overflow-x:auto;
+  }
+  .flow-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:16px 18px; min-width:168px; flex:1;
+  }
+  .flow-card .k-label{font-size:11.5px; color:var(--ink-faint); font-weight:600; margin-bottom:6px;}
+  .flow-card .k-value{font-family:var(--mono); font-size:22px; font-weight:700; color:var(--ink);}
+  .flow-card .k-value.neg{color:var(--warn);}
+  .flow-card .k-value.pos{color:var(--accent-deep);}
+  .flow-card .k-sub{font-size:11px; color:var(--ink-faint); margin-top:4px;}
+  .flow-op{
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono);
+    font-size:20px; color:var(--ink-faint); padding:0 10px; font-weight:600;
+  }
+  .flow-card.final{background:var(--ink); border-color:var(--ink);}
+  .flow-card.final .k-label{color:#AEB9CE;}
+  .flow-card.final .k-value{color:#fff;}
+  .flow-card.final .k-sub{color:#8493AD;}
+  .flow-card.alert{border-color:var(--warn); background:var(--warn-bg);}
+  .flow-card.alert .k-value{color:var(--warn);}
+
+  /* Filter bar */
+  .filter-bar{
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px;
+  }
+  .month-bar{
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:22px 0 24px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px;
+  }
+  .month-bar .mb-label{font-size:12.5px; font-weight:700; color:var(--ink-soft); white-space:nowrap;}
+  .month-bar select, .month-bar input[type=text]{
+    font-family:var(--sans); font-size:13px; padding:7px 10px; border:1px solid var(--border-strong);
+    border-radius:7px; background:#fff; color:var(--ink);
+  }
+  .month-bar input[type=text]{width:200px;}
+  .filter-bar select, .filter-bar input[type=text]{
+    font-family:var(--sans); font-size:13px; padding:7px 10px; border:1px solid var(--border-strong);
+    border-radius:7px; background:#fff; color:var(--ink);
+  }
+  .filter-bar input[type=text]{flex:1; min-width:160px;}
+  .filter-bar .spacer{flex:1;}
+  .btn{
+    font-family:var(--sans); font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:7px;
+    border:1px solid var(--border-strong); background:#fff; color:var(--ink); cursor:pointer; transition:.15s;
+  }
+  .btn:hover{border-color:var(--ink-soft);}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .btn.primary:hover{background:var(--accent-deep); border-color:var(--accent-deep);}
+  .btn.ghost{border-color:transparent; color:var(--ink-soft);}
+  .count-pill{font-family:var(--mono); font-size:12px; color:var(--ink-faint);}
+
+  /* Table */
+  .table-wrap{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;}
+  table{width:100%; border-collapse:collapse; font-size:12.8px;}
+  thead th{
+    text-align:left; padding:10px 12px; background:#F8FAFB; color:var(--ink-soft);
+    font-weight:700; font-size:11.5px; letter-spacing:.03em; text-transform:uppercase;
+    border-bottom:1px solid var(--border); cursor:pointer; white-space:nowrap; user-select:none;
+  }
+  thead th:hover{color:var(--ink);}
+  thead th .arrow{opacity:.4; font-size:10px; margin-left:3px;}
+  tbody tr.data-row{border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s;}
+  tbody tr.data-row:hover{background:#FAFBFC;}
+  tbody tr.data-row.expanded{background:var(--accent-bg);}
+  tbody td{padding:9px 12px; vertical-align:top;}
+  td.num{font-family:var(--mono); text-align:right; white-space:nowrap;}
+  td.mono{font-family:var(--mono); font-size:12px; color:var(--ink-soft);}
+  .vendor-name{font-weight:600; color:var(--ink);}
+  .vendor-code{font-family:var(--mono); font-size:11px; color:var(--ink-faint);}
+  .status-pill{
+    display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:700;
+  }
+  .status-已結清{background:var(--accent-bg); color:var(--accent-deep);}
+  .status-部分沖銷{background:#FFF4E0; color:#966A0D;}
+  .status-未沖銷{background:#EEF1F5; color:var(--ink-soft);}
+  .status-負值調整{background:#EAF1FB; color:#2B5A9E;}
+  .status-異常結案{background:#F1EAFB; color:#6B3FA0;}
+  .status-異常\(超額沖銷\){background:var(--warn-bg); color:var(--warn);}
+  .expand-caret{display:inline-block; width:14px; color:var(--ink-faint); transition:transform .15s;}
+  tr.expanded .expand-caret{transform:rotate(90deg);}
+  tr.detail-row td{background:#FCFDFE; padding:0 12px 14px 34px;}
+  .sub-table{width:100%; border-collapse:collapse; margin-top:6px; font-size:12px;}
+  .sub-table th{
+    text-align:left; padding:6px 10px; color:var(--ink-faint); font-weight:600; font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.03em; border-bottom:1px solid var(--border);
+  }
+  .sub-table td{padding:6px 10px; border-bottom:1px dashed var(--border); font-family:var(--mono); font-size:11.8px;}
+  .sub-table td.txt{font-family:var(--sans);}
+  .empty-state{padding:56px 20px; text-align:center; color:var(--ink-faint);}
+  .empty-state .big{font-size:15px; font-weight:700; color:var(--ink-soft); margin-bottom:6px;}
+
+  /* Orphan panel */
+  .orphan-panel{
+    margin-top:22px; border:1px solid var(--warn); background:var(--warn-bg); border-radius:var(--radius); padding:16px 18px;
+  }
+  .orphan-panel h3{margin:0 0 4px; font-size:13.5px; color:#B8462F;}
+  .orphan-panel p{margin:0 0 12px; font-size:12.5px; color:#8A4634;}
+  .orphan-panel table{background:#fff; border-radius:8px; overflow:hidden;}
+  .orphan-panel thead th{background:#fbe4de;}
+
+  footer.note{margin-top:26px; font-size:11.5px; color:var(--ink-faint); text-align:center;}
+  .toast{
+    background:var(--ink); color:#fff; padding:11px 18px; border-radius:8px; font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:min(420px, calc(100vw - 32px)); text-align:center; line-height:1.5;
+    animation: toast-in .15s ease-out;
+  }
+  .toast.warn{background:var(--warn);}
+  @keyframes toast-in{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+
+  @media (max-width:900px){
+    .upload-row{grid-template-columns:1fr;}
+    .flow-wrap{flex-wrap:wrap;}
+    .flow-op{display:none;}
+    .flow-card{min-width:calc(50% - 8px);}
+  }
+
+  @media (max-width:640px){
+    body{font-size:13px;}
+    .app{padding:0 12px 48px;}
+    header.top{padding:20px 16px 18px;}
+    header.top .inner{flex-direction:column; align-items:flex-start; gap:10px;}
+    header.top h1{font-size:16.5px;}
+    header.top p{font-size:11.5px;}
+    .badge-period{font-size:11px;}
+    .section-label{margin-top:6px;}
+    .dropzone{padding:14px; min-height:100px;}
+    .dropzone .dz-title{font-size:12.5px;}
+    .month-bar, .filter-bar{padding:10px 12px; gap:8px;}
+    .month-bar select, .filter-bar select{flex:1 1 auto; min-width:0;}
+    .month-bar input[type=text]{width:auto; flex:1 1 140px;}
+    .filter-bar input[type=text]{flex:1 1 100%; order:10;}
+    .filter-bar .spacer{display:none;}
+    .btn{font-size:11.5px; padding:7px 10px; white-space:nowrap;}
+    .flow-card{min-width:100%; padding:14px 16px;}
+    .flow-card .k-value{font-size:19px;}
+    .flow-op{display:none;}
+    table{font-size:11.5px;}
+    thead th{padding:8px 9px; font-size:10px;}
+    tbody td{padding:8px 9px;}
+    thead th:first-child, tbody td:first-child{
+      position:sticky; left:0; z-index:2; background:#fff;
+      box-shadow:2px 0 6px rgba(0,0,0,.06);
+    }
+    thead th:first-child{background:#F8FAFB; z-index:3;}
+    tbody tr.data-row:hover td:first-child{background:#FAFBFC;}
+    tbody tr.data-row.expanded td:first-child{background:var(--accent-bg);}
+    tr.detail-row td{padding-left:16px;}
+    .sub-table{font-size:11px;}
+    .orphan-panel{padding:14px 14px;}
+    .orphan-panel table{font-size:11px;}
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="inner">
+    <div>
+      <h1>廠商預提折讓沖銷比對系統</h1>
+      <p>拖曳期初餘額、本月新增、本月沖銷三個檔案，自動依預提單號比對並試算期末餘額</p>
+    </div>
+    <div class="badge-period" id="periodBadge">尚未載入資料</div>
+  </div>
+</header>
+
+<div class="app">
+
+  <div class="month-bar">
+    <span class="mb-label">📅 月份紀錄</span>
+    <select id="monthSelect"><option value="">選擇已儲存的月份…</option></select>
+    <button class="btn primary" id="btnLoadMonth">🔍 查看</button>
+    <button class="btn ghost" id="btnDeleteMonth">🗑 刪除選取月份</button>
+    <span class="spacer"></span>
+    <input type="text" id="periodLabelInput" placeholder="輸入本次月份，例如 2026年01月">
+    <button class="btn primary" id="btnSaveMonth">💾 儲存本月結果</button>
+  </div>
+
+  <div class="section-label">Step 1 — 上傳三個檔案</div>
+  <div class="upload-row">
+    <div class="dropzone" id="dz-balance" data-kind="balance">
+      <span class="dz-icon">📂</span>
+      <div class="dz-title">① 預提折讓統計表餘額</div>
+      <div class="dz-sub">期初未沖餘額（僅第一次或需重設時上傳）</div>
+      <div class="dz-file" id="file-balance"></div>
+      <input type="file" id="input-balance" accept=".xlsx,.xls">
+    </div>
+    <div class="dropzone" id="dz-new" data-kind="new">
+      <span class="dz-icon">🆕</span>
+      <div class="dz-title">② 本月新增預提明細</div>
+      <div class="dz-sub">當月新增預提折讓（.xlsx／.xls）</div>
+      <div class="dz-file" id="file-new"></div>
+      <input type="file" id="input-new" accept=".xlsx,.xls">
+    </div>
+    <div class="dropzone" id="dz-writeoff" data-kind="writeoff">
+      <span class="dz-icon">✅</span>
+      <div class="dz-title">③ 本月沖銷預提明細</div>
+      <div class="dz-sub">依預提單號沖銷（.xlsx）</div>
+      <div class="dz-file" id="file-writeoff"></div>
+      <input type="file" id="input-writeoff" accept=".xlsx,.xls">
+    </div>
+  </div>
+
+  <div style="text-align:center; margin:-14px 0 30px;">
+    <button class="btn primary" id="btnRecompute" style="padding:10px 28px; font-size:13.5px;">🔄 更新數據</button>
+    <div style="font-size:11.5px; color:var(--ink-faint); margin-top:6px;">三個檔案都上傳後會自動計算一次；換檔或修正資料後，按這顆按鈕可強制重新比對</div>
+    <div id="ledgerStatus" style="font-size:12px; color:var(--ink-soft); margin-top:14px; background:var(--accent-bg); border:1px solid var(--border); border-radius:8px; padding:10px 14px; display:inline-block;"></div>
+  </div>
+
+  <div id="resultsArea" style="display:none;">
+
+    <div class="section-label">Step 2 — 期初 + 新增 − 沖銷 = 期末</div>
+    <div class="flow-wrap" id="flowWrap"></div>
+
+    <div class="filter-bar">
+      <select id="filterVendor"><option value="">全部廠商</option></select>
+      <select id="filterStatus">
+        <option value="">全部狀態</option>
+        <option value="未沖銷">未沖銷</option>
+        <option value="部分沖銷">部分沖銷</option>
+        <option value="已結清">已結清</option>
+        <option value="負值調整">負值調整</option>
+        <option value="異常(超額沖銷)">異常（超額沖銷）</option>
+        <option value="異常結案">異常結案</option>
+      </select>
+      <input type="text" id="filterSearch" placeholder="搜尋預提單號／廠商／說明…">
+      <span class="spacer"></span>
+      <span class="count-pill" id="rowCount"></span>
+      <button class="btn ghost" id="btnClearFilter">清除篩選</button>
+      <button class="btn" id="btnExport">匯出 CSV</button>
+      <button class="btn" id="btnExportExcel">匯出 Excel</button>
+      <button class="btn primary" id="btnCommitRollforward">✅ 結轉為下月期初餘額</button>
+      <button class="btn" id="btnReset">重新上傳</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="mainTable">
+        <thead>
+          <tr>
+            <th data-key="id">預提單號<span class="arrow"></span></th>
+            <th data-key="vendorName">廠商<span class="arrow"></span></th>
+            <th data-key="sourceType">來源<span class="arrow"></span></th>
+            <th data-key="period">折抵期間<span class="arrow"></span></th>
+            <th data-key="amount" style="text-align:right">預提金額<span class="arrow"></span></th>
+            <th data-key="writeoffTotal" style="text-align:right">本月沖銷<span class="arrow"></span></th>
+            <th data-key="endBalance" style="text-align:right">期末未沖<span class="arrow"></span></th>
+            <th data-key="status">狀態<span class="arrow"></span></th>
+            <th style="text-align:center">異常結案</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="big">沒有符合篩選條件的資料</div>
+        <div>試著清除篩選條件</div>
+      </div>
+    </div>
+
+    <div class="orphan-panel" id="orphanPanel" style="display:none;">
+      <h3>⚠ 沖銷明細中有 <span id="orphanCount"></span> 筆找不到對應的預提單號</h3>
+      <p>以下沖銷記錄的「預提單號」未出現在期初餘額或本月新增清單中，請確認單號是否輸入錯誤，或該筆預提是否遺漏於上傳檔案。</p>
+      <table>
+        <thead><tr>
+          <th style="padding:8px 10px;">行銷獎勵單號</th><th style="padding:8px 10px;">廠商</th>
+          <th style="padding:8px 10px;">找不到的預提單號</th><th style="padding:8px 10px; text-align:right;">沖預提金額</th>
+          <th style="padding:8px 10px;">發票號碼</th>
+        </tr></thead>
+        <tbody id="orphanBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+</div>
+<footer class="note">資料僅於瀏覽器本機處理，不會上傳到任何伺服器</footer>
+
+<div id="confirmModal" style="display:none; position:fixed; inset:0; background:rgba(22,33,62,.5); z-index:999; align-items:center; justify-content:center; padding:20px;">
+  <div style="background:#fff; border-radius:12px; padding:22px 24px; max-width:380px; width:100%; box-shadow:0 16px 48px rgba(0,0,0,.3);">
+    <div id="confirmModalMsg" style="font-size:13.5px; color:#16213E; margin-bottom:18px; line-height:1.7; white-space:pre-line;"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button class="btn ghost" id="confirmModalCancel">取消</button>
+      <button class="btn primary" id="confirmModalOk">確定</button>
+    </div>
+  </div>
+</div>
+<div id="toastBox" style="position:fixed; left:50%; bottom:26px; transform:translateX(-50%); z-index:999; display:flex; flex-direction:column; gap:8px; align-items:center;"></div>
+
+<script>
+(function(){
+  const state = { balance: null, new: null, writeoff: null, records: [], orphan: [], sort:{key:'id', dir:1}, expanded:new Set(), manualClosed:new Set() };
+
+  function showToast(msg, isWarn){
+    const box = document.getElementById('toastBox');
+    const t = document.createElement('div');
+    t.className = 'toast' + (isWarn ? ' warn' : '');
+    t.textContent = msg;
+    box.appendChild(t);
+    setTimeout(() => { t.remove(); }, 4200);
+  }
+
+  function showConfirm(msg, onOk){
+    const modal = document.getElementById('confirmModal');
+    document.getElementById('confirmModalMsg').textContent = msg;
+    modal.style.display = 'flex';
+    const okBtn = document.getElementById('confirmModalOk');
+    const cancelBtn = document.getElementById('confirmModalCancel');
+    function cleanup(){
+      modal.style.display = 'none';
+      okBtn.removeEventListener('click', onOkClick);
+      cancelBtn.removeEventListener('click', onCancelClick);
+    }
+    function onOkClick(){ cleanup(); onOk(); }
+    function onCancelClick(){ cleanup(); }
+    okBtn.addEventListener('click', onOkClick);
+    cancelBtn.addEventListener('click', onCancelClick);
+  }
+
+  const MANUAL_CLOSED_KEY = 'arReconManualClosed_v1';
+  function loadManualClosed(){
+    try {
+      const raw = localStorage.getItem(MANUAL_CLOSED_KEY);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch(e){ return new Set(); }
+  }
+  function saveManualClosed(){
+    try { localStorage.setItem(MANUAL_CLOSED_KEY, JSON.stringify(Array.from(state.manualClosed))); }
+    catch(e){}
+  }
+  state.manualClosed = loadManualClosed();
+
+  function fmtNum(n){
+    if (n === 0 || n === null || n === undefined || isNaN(n)) return '-';
+    return Math.round(n).toLocaleString('zh-TW');
+  }
+  function fmtSigned(n){
+    if (!n) return '-';
+    const s = Math.round(Math.abs(n)).toLocaleString('zh-TW');
+    return n < 0 ? '(' + s + ')' : s;
+  }
+
+  // ---------- File parsing ----------
+  function readFile(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(e.target.result, {type:'array'});
+          resolve(wb);
+        } catch(err){ reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function isLedgerId(v){ return /^\d{9,}$/.test(String(v||'').trim()); }
+  function isIncentiveId(v){ return /^D\d+/.test(String(v||'').trim()); }
+
+  function pickSheetRows(wb, matcher){
+    for (const name of wb.SheetNames){
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:''});
+      if (rows.some(r => matcher(r[0]))) return rows;
+    }
+    // fallback: first sheet
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:''});
+  }
+
+  function parseLedgerRows(rows, sourceType){
+    const out = [];
+    for (const r of rows){
+      const idRaw = String(r[0] ?? '').trim();
+      if (!isLedgerId(idRaw)) continue;
+      const vendorRaw = String(r[2] ?? '').trim();
+      const sp = vendorRaw.indexOf(' ');
+      const vendorCode = sp > 0 ? vendorRaw.slice(0, sp) : vendorRaw;
+      const vendorName = sp > 0 ? vendorRaw.slice(sp+1).trim() : vendorRaw;
+      out.push({
+        id: idRaw,
+        handler: String(r[1] ?? '').trim(),
+        vendorCode, vendorName, vendorRaw,
+        period: String(r[3] ?? '').trim(),
+        setDate: String(r[4] ?? '').trim(),
+        amount: Number(r[5]) || 0,
+        startBalance: Number(r[5]) || 0,
+        unresolvedRaw: Number(r[6]) || 0,
+        pendingEntry: Number(r[7]) || 0,
+        category: String(r[8] ?? '').trim(),
+        note: String(r[9] ?? '').trim(),
+        sourceType
+      });
+    }
+    return out;
+  }
+
+  function parseWriteoffRows(rows){
+    const out = [];
+    for (const r of rows){
+      const idRaw = String(r[0] ?? '').trim();
+      if (!isIncentiveId(idRaw)) continue;
+      out.push({
+        incentiveId: idRaw,
+        vendorCode: String(r[1] ?? '').trim(),
+        vendorName: String(r[2] ?? '').trim(),
+        voucherType: String(r[3] ?? '').trim(),
+        incentiveAmount: Number(r[4]) || 0,
+        provisionId: String(r[5] ?? '').trim(),
+        category: String(r[6] ?? '').trim(),
+        writeoffAmount: Number(r[7]) || 0,
+        diff: Number(r[8]) || 0,
+        invoiceNo: String(r[9] ?? '').trim(),
+      });
+    }
+    return out;
+  }
+
+  // ---------- Opening-balance ledger (persists across months) ----------
+  const LEDGER_KEY = 'arReconLedgerBaseline_v1';
+  function loadLedger(){
+    if (!storageAvailable) return null;
+    try {
+      const raw = localStorage.getItem(LEDGER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch(e){ return null; }
+  }
+  function saveLedger(records){
+    if (!storageAvailable) return false;
+    try {
+      localStorage.setItem(LEDGER_KEY, JSON.stringify({records, updatedAt: new Date().toISOString()}));
+      return true;
+    } catch(e){ return false; }
+  }
+  function getBaselineRecords(){
+    if (state.balance) return state.balance;
+    const ledger = loadLedger();
+    return ledger ? ledger.records : null;
+  }
+  function renderLedgerStatus(){
+    const el = document.getElementById('ledgerStatus');
+    if (!el) return;
+    if (state.balance){
+      el.innerHTML = `本次已上傳新的期初餘額檔案（${state.balance.length} 筆），計算後將取代原本儲存的期初餘額。`;
+      return;
+    }
+    const ledger = loadLedger();
+    if (ledger && ledger.records && ledger.records.length){
+      const total = ledger.records.reduce((s,r) => s + r.startBalance, 0);
+      const d = new Date(ledger.updatedAt);
+      const dateStr = isNaN(d) ? '' : d.toLocaleDateString('zh-TW') + ' ' + d.toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'});
+      el.innerHTML = `✅ 已儲存期初餘額：${ledger.records.length} 筆，合計 ${fmtNum(total)}（最後更新於 ${dateStr}）— 之後只需上傳②③即可。 <button class="btn ghost" id="btnClearLedger" style="margin-left:6px;padding:4px 10px;font-size:11px;">清除已儲存的期初餘額</button>`;
+    } else {
+      el.innerHTML = `尚未儲存期初餘額，請先上傳一次「① 預提折讓統計表餘額」。`;
+    }
+  }
+
+  async function handleFile(kind, file){
+    const wb = await readFile(file);
+    if (kind === 'writeoff'){
+      const rows = pickSheetRows(wb, isIncentiveId);
+      state.writeoff = parseWriteoffRows(rows);
+    } else {
+      const rows = pickSheetRows(wb, isLedgerId);
+      state[kind] = parseLedgerRows(rows, kind === 'balance' ? '期初' : '新增');
+      if (kind === 'balance') saveLedger(state.balance);
+    }
+    document.getElementById('file-' + kind).textContent = file.name;
+    document.getElementById('dz-' + kind).classList.add('loaded');
+    document.getElementById('dz-' + kind).querySelector('.dz-count') ||
+      (() => {
+        const c = document.createElement('span');
+        c.className = 'dz-count';
+        document.getElementById('dz-' + kind).appendChild(c);
+      })();
+    document.getElementById('dz-' + kind).querySelector('.dz-count').textContent =
+      kind === 'writeoff' ? state.writeoff.length + ' 筆' : state[kind].length + ' 筆';
+    renderLedgerStatus();
+    tryCompute();
+  }
+
+  // ---------- Reconciliation ----------
+  function tryCompute(){
+    const baseline = getBaselineRecords();
+    if (!baseline || !state.new || !state.writeoff){ renderLedgerStatus(); return; }
+    const master = new Map();
+    for (const r of baseline) master.set(r.id, r);
+    for (const r of state.new) master.set(r.id, r);
+
+    const writeoffByProvision = new Map();
+    const orphan = [];
+    for (const w of state.writeoff){
+      if (!master.has(w.provisionId)){ orphan.push(w); continue; }
+      if (!writeoffByProvision.has(w.provisionId)) writeoffByProvision.set(w.provisionId, []);
+      writeoffByProvision.get(w.provisionId).push(w);
+    }
+
+    const records = [];
+    for (const [id, rec] of master){
+      const matched = writeoffByProvision.get(id) || [];
+      const writeoffTotal = matched.reduce((s,w) => s + w.writeoffAmount, 0);
+      const endBalance = rec.startBalance - writeoffTotal;
+      let status;
+      if (rec.startBalance < 0){
+        status = (matched.length && Math.round(endBalance) === 0) ? '已結清' : '負值調整';
+      } else if (endBalance < 0) status = '異常(超額沖銷)';
+      else if (writeoffTotal > 0 && Math.round(endBalance) === 0) status = '已結清';
+      else if (writeoffTotal > 0) status = '部分沖銷';
+      else status = '未沖銷';
+      records.push(Object.assign({}, rec, {writeoffTotal, endBalance, matched, status}));
+    }
+    state.records = records;
+    state.orphan = orphan;
+    renderLedgerStatus();
+
+    populateVendorFilter(records);
+    renderAll();
+    document.getElementById('resultsArea').style.display = 'block';
+    const periods = Array.from(new Set(state.new.map(r => r.period).filter(Boolean)));
+    let label = '';
+    if (periods.length){
+      const m = periods[0].match(/(\d{4})\/(\d{2})/);
+      if (m) label = m[1] + '年' + m[2] + '月';
+    }
+    document.getElementById('periodBadge').textContent = label || '已載入資料';
+    const labelInput = document.getElementById('periodLabelInput');
+    if (!labelInput.value) labelInput.value = label;
+  }
+
+  function populateVendorFilter(records){
+    const sel = document.getElementById('filterVendor');
+    const current = sel.value;
+    const vendors = Array.from(new Set(records.map(r => r.vendorCode + '｜' + r.vendorName))).sort();
+    sel.innerHTML = '<option value="">全部廠商</option>' +
+      vendors.map(v => `<option value="${v}">${v}</option>`).join('');
+    sel.value = current;
+  }
+
+  // ---------- Rendering ----------
+  function displayStatus(r){
+    return state.manualClosed.has(r.id) ? '異常結案' : r.status;
+  }
+
+  function getFiltered(){
+    const vendor = document.getElementById('filterVendor').value;
+    const status = document.getElementById('filterStatus').value;
+    const q = document.getElementById('filterSearch').value.trim().toLowerCase();
+    let rows = state.records.slice();
+    if (vendor) rows = rows.filter(r => (r.vendorCode + '｜' + r.vendorName) === vendor);
+    if (status) rows = rows.filter(r => displayStatus(r) === status);
+    if (q) rows = rows.filter(r =>
+      r.id.toLowerCase().includes(q) ||
+      r.vendorCode.toLowerCase().includes(q) ||
+      r.vendorName.toLowerCase().includes(q) ||
+      (r.note || '').toLowerCase().includes(q)
+    );
+    const {key, dir} = state.sort;
+    rows.sort((a,b) => {
+      let av = a[key], bv = b[key];
+      if (typeof av === 'string') return av.localeCompare(bv, 'zh-Hant') * dir;
+      return ((av||0) - (bv||0)) * dir;
+    });
+    return rows;
+  }
+
+  function renderFlow(){
+    const wrap = document.getElementById('flowWrap');
+    const startTotal = state.records.filter(r => r.sourceType === '期初').reduce((s,r)=>s+r.startBalance,0);
+    const newTotal = state.records.filter(r => r.sourceType === '新增').reduce((s,r)=>s+r.startBalance,0);
+    const writeoffTotal = state.records.reduce((s,r)=>s+r.writeoffTotal,0);
+    const orphanTotal = state.orphan.reduce((s,w)=>s+w.writeoffAmount,0);
+    const endTotal = state.records.reduce((s,r)=>s+r.endBalance,0);
+    const anomalyCount = state.records.filter(r => r.status.indexOf('異常') === 0 && !state.manualClosed.has(r.id)).length + state.orphan.length;
+
+    const cards = [
+      {label:'期初餘額', value: fmtNum(startTotal), sub: state.records.filter(r=>r.sourceType==='期初').length + ' 筆'},
+      {op:'+'},
+      {label:'本月新增', value: fmtNum(newTotal), sub: state.records.filter(r=>r.sourceType==='新增').length + ' 筆'},
+      {op:'−'},
+      {label:'本月沖銷', value: fmtNum(writeoffTotal), sub: state.records.filter(r => r.writeoffTotal > 0).length + ' 筆單號比對成功' + (orphanTotal ? '（另有未比對 ' + fmtNum(orphanTotal) + '）' : '')},
+      {op:'='},
+      {label:'期末餘額', value: fmtNum(endTotal), sub: '所有預提單號合計', final:true},
+    ];
+    let html = cards.map(c => {
+      if (c.op) return `<div class="flow-op">${c.op}</div>`;
+      return `<div class="flow-card ${c.final?'final':''}">
+        <div class="k-label">${c.label}</div>
+        <div class="k-value">${c.value}</div>
+        <div class="k-sub">${c.sub}</div>
+      </div>`;
+    }).join('');
+    html += `<div class="flow-op"></div><div class="flow-card ${anomalyCount?'alert':''}">
+      <div class="k-label">異常筆數</div>
+      <div class="k-value">${anomalyCount}</div>
+      <div class="k-sub">超額沖銷或找不到對應單號</div>
+    </div>`;
+    wrap.innerHTML = html;
+  }
+
+  function renderTable(){
+    const rows = getFiltered();
+    const tbody = document.getElementById('tableBody');
+    document.getElementById('rowCount').textContent = rows.length + ' / ' + state.records.length + ' 筆';
+    document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
+    tbody.innerHTML = rows.map(r => rowHtml(r)).join('');
+
+    tbody.querySelectorAll('tr.data-row').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const id = tr.dataset.id;
+        if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
+        renderTable();
+      });
+    });
+
+    tbody.querySelectorAll('.manual-close-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.id;
+        if (cb.checked) state.manualClosed.add(id); else state.manualClosed.delete(id);
+        saveManualClosed();
+        renderTable();
+      });
+    });
+  }
+
+  function rowHtml(r){
+    const isExpanded = state.expanded.has(r.id);
+    const matched = r.matched || [];
+    const status = displayStatus(r);
+    const isManualClosed = state.manualClosed.has(r.id);
+    const statusClass = 'status-' + status.replace(/[()（）]/g, m => ({'(':'\\(',')':'\\)','（':'','）':''}[m]||'')).replace(/[（）]/g,'');
+    let out = `<tr class="data-row ${isExpanded?'expanded':''}" data-id="${r.id}">
+      <td class="mono"><span class="expand-caret">▸</span>${r.id}</td>
+      <td><div class="vendor-name">${r.vendorName||'-'}</div><div class="vendor-code">${r.vendorCode||''}</div></td>
+      <td>${r.sourceType||'-'}</td>
+      <td class="mono">${r.period||'-'}</td>
+      <td class="num">${fmtNum(r.startBalance)}</td>
+      <td class="num">${r.writeoffTotal ? fmtNum(r.writeoffTotal) : '-'}</td>
+      <td class="num">${fmtSigned(r.endBalance)}</td>
+      <td><span class="status-pill ${statusClass}">${status}</span></td>
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="manual-close-cb" data-id="${r.id}" ${isManualClosed?'checked':''}></td>
+    </tr>`;
+    if (isExpanded){
+      out += `<tr class="detail-row"><td colspan="9">`;
+      if (r.note) out += `<div style="font-size:12px;color:var(--ink-soft);margin:8px 0 2px;">說明：${r.note}${r.category ? '　｜　分類：' + r.category : ''}</div>`;
+      out += `<div style="font-size:11.5px;color:var(--ink-faint);margin:2px 0 8px;">來源檔案原始欄位（僅供參考，未納入計算）：未沖金額 ${fmtNum(r.unresolvedRaw)}　｜　已沖未入 ${fmtNum(r.pendingEntry)}</div>`;
+      if (matched.length){
+        out += `<table class="sub-table"><thead><tr>
+          <th>行銷獎勵單號</th><th>憑證種類</th><th>發票號碼</th><th style="text-align:right">沖預提金額</th>
+        </tr></thead><tbody>` +
+        matched.map(w => `<tr>
+          <td>${w.incentiveId||'-'}</td><td class="txt">${w.voucherType||'-'}</td><td>${w.invoiceNo||'-'}</td>
+          <td style="text-align:right">${fmtNum(w.writeoffAmount)}</td>
+        </tr>`).join('') + `</tbody></table>`;
+      } else {
+        out += `<div style="font-size:12px;color:var(--ink-faint);padding:8px 0;">本月尚無沖銷記錄</div>`;
+      }
+      out += `</td></tr>`;
+    }
+    return out;
+  }
+
+  function renderOrphan(){
+    const panel = document.getElementById('orphanPanel');
+    if (!state.orphan.length){ panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    document.getElementById('orphanCount').textContent = state.orphan.length;
+    document.getElementById('orphanBody').innerHTML = state.orphan.map(w => `
+      <tr>
+        <td style="padding:7px 10px;font-family:var(--mono);font-size:11.8px;">${w.incentiveId}</td>
+        <td style="padding:7px 10px;">${w.vendorName} <span style="color:var(--ink-faint);font-size:11px;">${w.vendorCode}</span></td>
+        <td style="padding:7px 10px;font-family:var(--mono);color:var(--warn);font-weight:700;">${w.provisionId}</td>
+        <td style="padding:7px 10px;text-align:right;font-family:var(--mono);">${fmtNum(w.writeoffAmount)}</td>
+        <td style="padding:7px 10px;font-family:var(--mono);font-size:11.8px;">${w.invoiceNo}</td>
+      </tr>`).join('');
+  }
+
+  function renderAll(){
+    renderFlow();
+    renderTable();
+    renderOrphan();
+  }
+
+  // ---------- Month history (localStorage) ----------
+  const STORAGE_PREFIX = 'arReconSnapshot_';
+  let storageAvailable = true;
+  try {
+    localStorage.setItem('__test__', '1');
+    localStorage.removeItem('__test__');
+  } catch(e){ storageAvailable = false; }
+
+  function listSavedMonths(){
+    if (!storageAvailable) return [];
+    try {
+      return Object.keys(localStorage)
+        .filter(k => k.indexOf(STORAGE_PREFIX) === 0)
+        .map(k => k.slice(STORAGE_PREFIX.length))
+        .sort();
+    } catch(e){ return []; }
+  }
+
+  function refreshMonthSelect(selected){
+    const sel = document.getElementById('monthSelect');
+    const months = listSavedMonths();
+    sel.innerHTML = '<option value="">選擇已儲存的月份…</option>' +
+      months.map(m => `<option value="${m}">${m}</option>`).join('');
+    if (selected) sel.value = selected;
+  }
+
+  function saveCurrentMonth(){
+    if (!storageAvailable){ showToast('這個瀏覽器不支援本機儲存，無法保留月份紀錄。'); return; }
+    const label = document.getElementById('periodLabelInput').value.trim();
+    if (!label){ showToast('請先在右邊輸入這次的月份名稱，例如 2026年01月'); return; }
+    if (!state.records.length){ showToast('目前沒有可儲存的比對結果，請先上傳三個檔案完成計算。'); return; }
+    const snapshot = {
+      records: state.records,
+      orphan: state.orphan,
+      savedAt: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem(STORAGE_PREFIX + label, JSON.stringify(snapshot));
+      refreshMonthSelect(label);
+      showToast('已儲存「' + label + '」的比對結果，之後可以從上方選單切換查看。');
+    } catch(e){
+      showToast('儲存失敗（可能是瀏覽器儲存空間不足）：' + e.message);
+    }
+  }
+
+  function loadMonth(label){
+    if (!storageAvailable) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_PREFIX + label);
+      if (!raw) return;
+      const snap = JSON.parse(raw);
+      state.records = snap.records || [];
+      state.orphan = snap.orphan || [];
+      state.expanded = new Set();
+      populateVendorFilter(state.records);
+      renderAll();
+      document.getElementById('resultsArea').style.display = 'block';
+      document.getElementById('periodBadge').textContent = label + '（已儲存的歷史紀錄）';
+      document.getElementById('periodLabelInput').value = label;
+    } catch(e){
+      showToast('讀取這個月份的紀錄失敗：' + e.message);
+    }
+  }
+
+  function deleteSelectedMonth(){
+    const sel = document.getElementById('monthSelect');
+    const label = sel.value;
+    if (!label){ showToast('請先在選單選擇要刪除的月份。'); return; }
+    showConfirm('確定要刪除「' + label + '」儲存的比對紀錄嗎？此動作無法復原。', () => {
+      try {
+        localStorage.removeItem(STORAGE_PREFIX + label);
+        refreshMonthSelect();
+        showToast('已刪除「' + label + '」的儲存紀錄。');
+      } catch(e){
+        showToast('刪除失敗：' + e.message);
+      }
+    });
+  }
+
+  // ---------- Events ----------
+  ['balance','new','writeoff'].forEach(kind => {
+    const dz = document.getElementById('dz-' + kind);
+    const input = document.getElementById('input-' + kind);
+    dz.addEventListener('click', () => input.click());
+    input.addEventListener('change', e => { if (e.target.files[0]) handleFile(kind, e.target.files[0]); });
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault(); dz.classList.remove('dragover');
+      const f = e.dataTransfer.files[0];
+      if (f) handleFile(kind, f);
+    });
+  });
+
+  document.getElementById('filterVendor').addEventListener('change', renderTable);
+  document.getElementById('filterStatus').addEventListener('change', renderTable);
+  document.getElementById('filterSearch').addEventListener('input', renderTable);
+  document.getElementById('btnClearFilter').addEventListener('click', () => {
+    document.getElementById('filterVendor').value = '';
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterSearch').value = '';
+    renderTable();
+  });
+  document.getElementById('btnRecompute').addEventListener('click', () => {
+    if (!getBaselineRecords() || !state.new || !state.writeoff){
+      showToast('請確認：期初餘額（已儲存或本次上傳）、本月新增、本月沖銷，三者都要齊全才能計算。');
+      return;
+    }
+    tryCompute();
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => location.reload());
+
+  document.getElementById('ledgerStatus').addEventListener('click', e => {
+    if (e.target.id === 'btnClearLedger'){
+      showConfirm('確定要清除已儲存的期初餘額嗎？清除後，下次需要重新上傳完整的期初餘額檔案。', () => {
+        try {
+          localStorage.removeItem(LEDGER_KEY);
+          showToast('已清除已儲存的期初餘額。');
+        } catch(err){
+          showToast('清除失敗：' + err.message);
+        }
+        renderLedgerStatus();
+      });
+    }
+  });
+
+  document.getElementById('btnCommitRollforward').addEventListener('click', () => {
+    if (!state.records.length){ showToast('目前沒有可結轉的計算結果，請先完成本月比對。'); return; }
+    showConfirm('確定要把這次算出的期末餘額，儲存為下個月的期初餘額嗎？\n下次只要上傳「本月新增」和「本月沖銷」兩個檔案即可，不用再上傳期初餘額檔案。', () => {
+      const newLedger = state.records
+        .filter(r => Math.round(r.endBalance) !== 0)
+        .map(r => ({
+          id: r.id,
+          handler: r.handler || '',
+          vendorCode: r.vendorCode, vendorName: r.vendorName, vendorRaw: r.vendorRaw || (r.vendorCode + ' ' + r.vendorName),
+          period: r.period, setDate: r.setDate,
+          amount: r.endBalance, startBalance: r.endBalance,
+          unresolvedRaw: 0, pendingEntry: 0,
+          category: r.category, note: r.note,
+          sourceType: '期初'
+        }));
+      if (saveLedger(newLedger)){
+        renderLedgerStatus();
+        showToast('已結轉完成：' + newLedger.length + ' 筆、合計 ' + fmtNum(newLedger.reduce((s,r) => s + r.startBalance, 0)) + '，儲存為下個月的期初餘額。');
+      } else {
+        showToast('儲存失敗，這個瀏覽器可能不支援本機儲存。', true);
+      }
+    });
+  });
+
+  document.querySelectorAll('#mainTable thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (state.sort.key === key) state.sort.dir *= -1; else { state.sort.key = key; state.sort.dir = 1; }
+      document.querySelectorAll('#mainTable thead th .arrow').forEach(a => a.textContent = '');
+      th.querySelector('.arrow').textContent = state.sort.dir === 1 ? '▲' : '▼';
+      renderTable();
+    });
+  });
+
+  document.getElementById('btnExport').addEventListener('click', () => {
+    const rows = getFiltered();
+    const header = ['預提單號','廠商代號','廠商名稱','來源','折抵期間','設定日期','預提金額','本月沖銷','期末未沖','狀態','折讓分類','說明','來源檔未沖金額(參考)','來源檔已沖未入(參考)'];
+    const lines = [header.join(',')];
+    rows.forEach(r => {
+      const line = [r.id, r.vendorCode, r.vendorName, r.sourceType, r.period, r.setDate, r.startBalance, r.writeoffTotal, r.endBalance, r.status, r.category, (r.note||'').replace(/,/g,'，').replace(/\n/g,' '), r.unresolvedRaw, r.pendingEntry];
+      lines.push(line.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+    });
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '預提折讓沖銷比對結果.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('btnSaveMonth').addEventListener('click', saveCurrentMonth);
+  document.getElementById('btnDeleteMonth').addEventListener('click', deleteSelectedMonth);
+  document.getElementById('btnLoadMonth').addEventListener('click', () => {
+    const label = document.getElementById('monthSelect').value;
+    if (!label){ showToast('請先在左邊選單選一個已儲存的月份。'); return; }
+    loadMonth(label);
+  });
+  document.getElementById('monthSelect').addEventListener('change', e => {
+    if (e.target.value) loadMonth(e.target.value);
+  });
+  refreshMonthSelect();
+  renderLedgerStatus();
+
+  document.getElementById('btnExportExcel').addEventListener('click', () => {
+    const rows = getFiltered();
+    const header = ['預提單號','廠商代號','廠商名稱','來源','折抵期間','設定日期','預提金額','本月沖銷','期末未沖','狀態','折讓分類','說明','來源檔未沖金額(參考)','來源檔已沖未入(參考)'];
+    const data = rows.map(r => [r.id, r.vendorCode, r.vendorName, r.sourceType, r.period, r.setDate, r.startBalance, r.writeoffTotal, r.endBalance, r.status, r.category, r.note || '', r.unresolvedRaw, r.pendingEntry]);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+    ws['!cols'] = header.map(() => ({wch: 16}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '沖銷比對結果');
+    const label = document.getElementById('periodLabelInput').value.trim();
+    XLSX.writeFile(wb, (label ? label + '_' : '') + '預提折讓沖銷比對結果.xlsx');
+  });
+
+})();
+</script>
+</body>
+</html>
